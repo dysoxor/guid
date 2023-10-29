@@ -111,7 +111,7 @@ In this way, the dataset is an array-like object with 47626 items. Each item is 
 
 Do not ask us why we use these three names - this is related to the dark history of a library called LDM.
 
-## Step 3 - What SD model do you want to control?
+## Step 3 - What SD model do you want to control? (only the v2-1_512-ema-pruned is working here so ignore the v1-5 or adapt it)
 
 Then you need to decide which Stable Diffusion Model you want to control. In this example, we will just use standard SD1.5. You can download it from the [official page of Stability](https://huggingface.co/runwayml/stable-diffusion-v1-5/tree/main). You want the file ["v1-5-pruned.ckpt"](https://huggingface.co/runwayml/stable-diffusion-v1-5/tree/main).
 
