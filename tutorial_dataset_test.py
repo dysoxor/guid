@@ -3,7 +3,7 @@ from tutorial_dataset import MyDataset
 dataset = MyDataset()
 print(len(dataset))
 
-item = dataset[0]
+item = dataset[1234]
 jpg = item['jpg']
 txt = item['txt']
 hint = item['hint']

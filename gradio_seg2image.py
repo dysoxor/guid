@@ -14,11 +14,18 @@ from annotator.uniformer import UniformerDetector
 from cldm.model import create_model, load_state_dict
 from cldm.ddim_hacked import DDIMSampler
 
-
+torch.cuda.empty_cache()
+def force_cudnn_initialization():
+    s = 32
+    dev = torch.device('cuda')
+    torch.nn.functional.conv2d(torch.zeros(s, s, s, s, device=dev), torch.zeros(s, s, s, s, device=dev))
+force_cudnn_initialization()
 apply_uniformer = UniformerDetector()
 
 model = create_model('./models/cldm_v21.yaml').cpu()
-model.load_state_dict(load_state_dict('./lightning_logs/version_1/checkpoints/epoch=123-step=1476467.ckpt', location='cuda'))
+model.load_state_dict(load_state_dict('./lightning_logs/version_4/checkpoints/epoch=7-step=95255.ckpt', location='cuda'))
+#model.load_state_dict(load_state_dict('./lightning_logs/version_5/checkpoints/epoch=9-step=89489.ckpt', location='cuda'))
+#model.load_state_dict(load_state_dict('./lightning_logs/version_6/checkpoints/epoch=10-step=98438.ckpt', location='cuda'))
 model = model.cuda()
 ddim_sampler = DDIMSampler(model)
 
@@ -89,7 +96,7 @@ with block:
                 n_prompt = gr.Textbox(label="Negative Prompt",
                                       value='longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality')
         with gr.Column():
-            result_gallery = gr.Gallery(label='Output', show_label=False, elem_id="gallery").style(grid=2, height='auto')
+            result_gallery = gr.Gallery(label='Output', show_label=False, elem_id="gallery")
     ips = [input_image, prompt, a_prompt, n_prompt, num_samples, image_resolution, detect_resolution, ddim_steps, guess_mode, strength, scale, seed, eta]
     run_button.click(fn=process, inputs=ips, outputs=[result_gallery])
 

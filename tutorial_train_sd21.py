@@ -8,7 +8,7 @@ from cldm.model import create_model, load_state_dict
 
 
 # Configs
-resume_path = './models/control_sd21_ini.ckpt'
+resume_path = './lightning_logs/version_3/checkpoints/epoch=0-step=11906.ckpt'
 batch_size = 1
 logger_freq = 300
 learning_rate = 1e-5
