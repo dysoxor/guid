@@ -1,348 +1,232 @@
-# News: A nightly version of ControlNet 1.1 is released!
+# GILD: Graph-Informed Layout and Design for Inspiration under Constraints
 
-[ControlNet 1.1](https://github.com/lllyasviel/ControlNet-v1-1-nightly) is released. Those new models will be merged to this repo after we make sure that everything is good.
+To start, you should first train the [GUILGET method](https://github.com/dysoxor/GUILGET)
+The instructions are already written, however some paths must be redefined
 
-# Below is ControlNet 1.0
+In the following we give the instructions to train and infer results from the second step. But before that let's setup your environment:
 
-Official implementation of [Adding Conditional Control to Text-to-Image Diffusion Models](https://arxiv.org/abs/2302.05543).
+```shell
+conda env create -f environment.yaml
+conda activate control
+```
 
-ControlNet is a neural network structure to control diffusion models by adding extra conditions.
+## Step 1 - Get the dataset ready
 
-![img](github_page/he.png)
+Upload the clay dataset as follows:
 
-It copys the weights of neural network blocks into a "locked" copy and a "trainable" copy. 
+    ControlNet/training/clay/prompt.json
+    ControlNet/training/clay/source/X.png
+    ControlNet/training/clay/target/X.png
 
-The "trainable" one learns your condition. The "locked" one preserves your model. 
+In the folder "clay/source", you will store the color-coded layouts. For getting the color-coded layouts from bounding box layout, use the [generate_clay_gt.py](https://huggingface.co/datasets/iasobolev/guilget/tree/main). It is also important to have a square shaped input, for that you can use the [rescale.py](https://huggingface.co/datasets/iasobolev/guilget/tree/main) for reducing the size, then use [borders.py](https://huggingface.co/datasets/iasobolev/guilget/tree/main) to add grey default borders that will allow to have a squared image without deformation of the input.
 
-Thanks to this, training with small dataset of image pairs will not destroy the production-ready diffusion models.
+In the folder "clay/target", you will store the design associated to each layout. You might need to use [rescale.py](https://huggingface.co/datasets/iasobolev/guilget/tree/main) and [borders.py](https://huggingface.co/datasets/iasobolev/guilget/tree/main) here as well
 
-The "zero convolution" is 1×1 convolution with both weight and bias initialized as zeros. 
+In the "clay/prompt.json", you will have their filenames and prompts. Each prompt is a default one "High quality, detailed, and professional app interface". More precisely, here is the expected format for the first two training data:
 
-Before training, all zero convolutions output zeros, and ControlNet will not cause any distortion.
+```json
+{"source": "source/68068.png", "target": "target/68068.png", "prompt": "High quality, detailed, and professional app interface"}
+{"source": "source/59725.png", "target": "target/59725.png", "prompt": "High quality, detailed, and professional app interface"}
+...
+```
 
-No layer is trained from scratch. You are still fine-tuning. Your original model is safe. 
+## Step 2 - Load the dataset
 
-This allows training on small-scale or even personal devices.
+Then you need to write a simple script to read this dataset for pytorch. (In fact we have written it for you in "tutorial_dataset.py".)
 
-This is also friendly to merge/replacement/offsetting of models/weights/blocks/layers.
+```python
+import json
+import cv2
+import numpy as np
 
-### FAQ
+from torch.utils.data import Dataset
 
-**Q:** But wait, if the weight of a conv layer is zero, the gradient will also be zero, and the network will not learn anything. Why "zero convolution" works?
 
-**A:** This is not true. [See an explanation here](docs/faq.md).
+class MyDataset(Dataset):
+    def __init__(self):
+        self.data = []
+        with open('./training/clay/prompt.json', 'rt') as f:
+            for line in f:
+                self.data.append(json.loads(line))
 
-# Stable Diffusion + ControlNet
+    def __len__(self):
+        return len(self.data)
 
-By repeating the above simple structure 14 times, we can control stable diffusion in this way:
+    def __getitem__(self, idx):
+        item = self.data[idx]
 
-![img](github_page/sd.png)
+        source_filename = item['source']
+        target_filename = item['target']
+        prompt = item['prompt']
 
-In this way, the ControlNet can **reuse** the SD encoder as a **deep, strong, robust, and powerful backbone** to learn diverse controls. Many evidences (like [this](https://jerryxu.net/ODISE/) and [this](https://vpd.ivg-research.xyz/)) validate that the SD encoder is an excellent backbone.
+        source = cv2.imread('./training/clay/' + source_filename)
+        target = cv2.imread('./training/clay/' + target_filename)
 
-Note that the way we connect layers is computational efficient. The original SD encoder does not need to store gradients (the locked original SD Encoder Block 1234 and Middle). The required GPU memory is not much larger than original SD, although many layers are added. Great!
+        # Do not forget that OpenCV read images in BGR order.
+        source = cv2.cvtColor(source, cv2.COLOR_BGR2RGB)
+        target = cv2.cvtColor(target, cv2.COLOR_BGR2RGB)
 
-# Features & News
+        # Normalize source images to [0, 1].
+        source = source.astype(np.float32) / 255.0
 
-2023/0/14 - We released [ControlNet 1.1](https://github.com/lllyasviel/ControlNet-v1-1-nightly). Those new models will be merged to this repo after we make sure that everything is good.
+        # Normalize target images to [-1, 1].
+        target = (target.astype(np.float32) / 127.5) - 1.0
 
-2023/03/03 - We released a discussion - [Precomputed ControlNet: Speed up ControlNet by 45%, but is it necessary?](https://github.com/lllyasviel/ControlNet/discussions/216)
+        return dict(jpg=target, txt=prompt, hint=source)
 
-2023/02/26 - We released a blog - [Ablation Study: Why ControlNets use deep encoder? What if it was lighter? Or even an MLP?](https://github.com/lllyasviel/ControlNet/discussions/188)
+```
 
-2023/02/20 - Implementation for non-prompt mode released. See also [Guess Mode / Non-Prompt Mode](#guess-anchor).
+This will make your dataset into an array-like object in python. You can test this dataset simply by accessing the array, like this
 
-2023/02/12 - Now you can play with any community model by [Transferring the ControlNet](https://github.com/lllyasviel/ControlNet/discussions/12).
+```python
+from tutorial_dataset import MyDataset
 
-2023/02/11 - [Low VRAM mode](docs/low_vram.md) is added. Please use this mode if you are using 8GB GPU(s) or if you want larger batch size.
+dataset = MyDataset()
+print(len(dataset))
 
-# Production-Ready Pretrained Models
+item = dataset[1234]
+jpg = item['jpg']
+txt = item['txt']
+hint = item['hint']
+print(txt)
+print(jpg.shape)
+print(hint.shape)
 
-First create a new conda environment
+```
 
-    conda env create -f environment.yaml
-    conda activate control
+The outputs of this simple test on my machine are 
 
-All models and detectors can be downloaded from [our Hugging Face page](https://huggingface.co/lllyasviel/ControlNet). Make sure that SD models are put in "ControlNet/models" and detectors are put in "ControlNet/annotator/ckpts". Make sure that you download all necessary pretrained weights and detector models from that Hugging Face page, including HED edge detection model, Midas depth estimation model, Openpose, and so on. 
+    47626
+    High quality, detailed, and professional app interface
+    (512, 512, 3)
+    (512, 512, 3)
 
-We provide 9 Gradio apps with these models.
+And this code is in "tutorial_dataset_test.py".
 
-All test images can be found at the folder "test_imgs".
+In this way, the dataset is an array-like object with 47626 items. Each item is a dict with three entry "jpg", "txt", and "hint". The "jpg" is the target image, the "hint" is the control image, and the "txt" is the prompt. 
 
-## ControlNet with Canny Edge
+Do not ask us why we use these three names - this is related to the dark history of a library called LDM.
 
-Stable Diffusion 1.5 + ControlNet (using simple Canny edge detection)
+## Step 3 - What SD model do you want to control?
 
-    python gradio_canny2image.py
+Then you need to decide which Stable Diffusion Model you want to control. In this example, we will just use standard SD1.5. You can download it from the [official page of Stability](https://huggingface.co/runwayml/stable-diffusion-v1-5/tree/main). You want the file ["v1-5-pruned.ckpt"](https://huggingface.co/runwayml/stable-diffusion-v1-5/tree/main).
 
-The Gradio app also allows you to change the Canny edge thresholds. Just try it for more details.
+(Or ["v2-1_512-ema-pruned.ckpt"](https://huggingface.co/stabilityai/stable-diffusion-2-1-base/tree/main) if you are using SD2.)
 
-Prompt: "bird"
-![p](github_page/p1.png)
+Then you need to attach a control net to the SD model.
 
-Prompt: "cute dog"
-![p](github_page/p2.png)
+Note that all weights inside the ControlNet are also copied from SD so that no layer is trained from scratch, and you are still finetuning the entire model.
 
-## ControlNet with M-LSD Lines
+We provide a simple script for you to achieve this easily. If your SD filename is "./models/v1-5-pruned.ckpt" and you want the script to save the processed model (SD+ControlNet) at location "./models/control_sd15_ini.ckpt", you can just run:
 
-Stable Diffusion 1.5 + ControlNet (using simple M-LSD straight line detection)
+    python tool_add_control.py ./models/v1-5-pruned.ckpt ./models/control_sd15_ini.ckpt
 
-    python gradio_hough2image.py
+Or if you are using SD2:
 
-The Gradio app also allows you to change the M-LSD thresholds. Just try it for more details.
+    python tool_add_control_sd21.py ./models/v2-1_512-ema-pruned.ckpt ./models/control_sd21_ini.ckpt
 
-Prompt: "room"
-![p](github_page/p3.png)
+You may also use other filenames as long as the command is "python tool_add_control.py input_path output_path".
 
-Prompt: "building"
-![p](github_page/p4.png)
 
-## ControlNet with HED Boundary
+## Step 4 - Train!
 
-Stable Diffusion 1.5 + ControlNet (using soft HED Boundary)
+Happy! We finally come to the most exciting part: training!
 
-    python gradio_hed2image.py
+The training code in "tutorial_train.py" is actually surprisingly simple:
 
-The soft HED Boundary will preserve many details in input images, making this app suitable for recoloring and stylizing. Just try it for more details.
+```python
+import pytorch_lightning as pl
+from torch.utils.data import DataLoader
+from tutorial_dataset import MyDataset
+from cldm.logger import ImageLogger
+from cldm.model import create_model, load_state_dict
 
-Prompt: "oil painting of handsome old man, masterpiece"
-![p](github_page/p5.png)
 
-Prompt: "Cyberpunk robot"
-![p](github_page/p6.png)
+# Configs
+resume_path = './models/control_sd15_ini.ckpt'
+batch_size = 4
+logger_freq = 300
+learning_rate = 1e-5
+sd_locked = True
+only_mid_control = False
 
-## ControlNet with User Scribbles
 
-Stable Diffusion 1.5 + ControlNet (using Scribbles)
+# First use cpu to load models. Pytorch Lightning will automatically move it to GPUs.
+model = create_model('./models/cldm_v15.yaml').cpu()
+model.load_state_dict(load_state_dict(resume_path, location='cpu'))
+model.learning_rate = learning_rate
+model.sd_locked = sd_locked
+model.only_mid_control = only_mid_control
 
-    python gradio_scribble2image.py
 
-Note that the UI is based on Gradio, and Gradio is somewhat difficult to customize. Right now you need to draw scribbles outside the UI (using your favorite drawing software, for example, MS Paint) and then import the scribble image to Gradio. 
+# Misc
+dataset = MyDataset()
+dataloader = DataLoader(dataset, num_workers=0, batch_size=batch_size, shuffle=True)
+logger = ImageLogger(batch_frequency=logger_freq)
+trainer = pl.Trainer(gpus=1, precision=32, callbacks=[logger])
 
-Prompt: "turtle"
-![p](github_page/p7.png)
 
-Prompt: "hot air balloon"
-![p](github_page/p8.png)
+# Train!
+trainer.fit(model, dataloader)
 
-### Interactive Interface
+```
+(or "tutorial_train_sd21.py" if you are using SD2)
 
-We actually provide an interactive interface
+Thanks to our organized dataset pytorch object and the power of pytorch_lightning, the entire code is just super short.
 
-    python gradio_scribble2image_interactive.py
+Now, you may take a look at [Pytorch Lightning Official DOC](https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.trainer.trainer.Trainer.html#trainer) to find out how to enable many useful features like gradient accumulation, multiple GPU training, accelerated dataset loading, flexible checkpoint saving, etc. All these only need about one line of code. Great!
 
-~~However, because gradio is very [buggy](https://github.com/gradio-app/gradio/issues/3166) and difficult to customize, right now, user need to first set canvas width and heights and then click "Open drawing canvas" to get a drawing area. Please do not upload image to that drawing canvas. Also, the drawing area is very small; it should be bigger. But I failed to find out how to make it larger. Again, gradio is really buggy.~~ (Now fixed, will update asap)
+Note that if you find OOM, perhaps you need to enable [Low VRAM mode](low_vram.md), and perhaps you also need to use smaller batch size and gradient accumulation. Or you may also want to use some “advanced” tricks like sliced attention or xformers. For example:
 
-The below dog sketch is drawn by me. Perhaps we should draw a better dog for showcase.
+```python
+# Configs
+batch_size = 1
 
-Prompt: "dog in a room"
-![p](github_page/p20.png)
+# Misc
+trainer = pl.Trainer(gpus=1, precision=32, callbacks=[logger], accumulate_grad_batches=4)  # But this will be 4x slower
+```
 
-## ControlNet with Fake Scribbles
+Note that training with 8 GB laptop GPU is challenging. We will need some GPU memory optimization at least as good as automatic1111’s UI. This may require expert modifications to the code.
 
-Stable Diffusion 1.5 + ControlNet (using fake scribbles)
+## Other options
 
-    python gradio_fake_scribble2image.py
+Beyond standard things, we also provide two important parameters "sd_locked" and "only_mid_control" that you need to know.
 
-Sometimes we are lazy, and we do not want to draw scribbles. This script use the exactly same scribble-based model but use a simple algorithm to synthesize scribbles from input images.
+### only_mid_control
 
-Prompt: "bag"
-![p](github_page/p9.png)
+By default, only_mid_control is False.
 
-Prompt: "shose" (Note that "shose" is a typo; it should be "shoes". But it still seems to work.)
-![p](github_page/p10.png)
+This can be helpful when your computation power is limited and want to speed up the training, or when you want to facilitate the "global" context learning. Note that sometimes you may pause training, set it to True, resume training, and pause again, and set it again, and resume again. 
 
-## ControlNet with Human Pose
+If your computation device is good, perhaps you do not need this. But I also know some artists are willing to train a model on their laptop for a month - in that case, perhaps this option can be useful.
 
-Stable Diffusion 1.5 + ControlNet (using human pose)
+### sd_locked
 
-    python gradio_pose2image.py
+By default, sd_locked is True.
 
-Apparently, this model deserves a better UI to directly manipulate pose skeleton. However, again, Gradio is somewhat difficult to customize. Right now you need to input an image and then the Openpose will detect the pose for you.
+This will unlock some layers in SD and you will train them as a whole.
 
-Prompt: "Chief in the kitchen"
-![p](github_page/p11.png)
+This option is DANGEROUS! If your dataset is not good enough, this may downgrade the capability of your SD model.
 
-Prompt: "An astronaut on the moon"
-![p](github_page/p12.png)
+However, this option is also very useful when you are training on images with some specific style, or when you are training with special datasets (like medical dataset with X-ray images or geographic datasets with lots of Google Maps). You can understand this as simultaneously training the ControlNet and something like a DreamBooth.
 
-## ControlNet with Semantic Segmentation
+Also, if your dataset is large, you may want to end the training with a few thousands of steps with those layer unlocked. This usually improve the "problem-specific" solutions a little. You may try it yourself to feel the difference.
 
-Stable Diffusion 1.5 + ControlNet (using semantic segmentation)
+Also, if you unlock some original layers, you may want a lower learning rate, like 2e-6.
 
-    python gradio_seg2image.py
+## More Consideration: Sudden Converge Phenomenon and Gradient Accumulation
 
-This model use ADE20K's segmentation protocol. Again, this model deserves a better UI to directly draw the segmentations. However, again, Gradio is somewhat difficult to customize. Right now you need to input an image and then a model called Uniformer will detect the segmentations for you. Just try it for more details.
+Because we use zero convolutions, the SD should always be able to predict meaningful images. (If it cannot, the training has already failed.)
 
-Prompt: "House"
-![p](github_page/p13.png)
+You will always find that at some iterations, the model "suddenly" be able to fit some training conditions. This means that you will get a basically usable model at about 3k to 7k steps (future training will improve it, but that model after the first "sudden converge" should be basically functional).
 
-Prompt: "River"
-![p](github_page/p14.png)
+Note that 3k to 7k steps is not very large, and you should consider larger batch size rather than more training steps. If you can observe the "sudden converge" at 3k step using batch size 4, then, rather than train it with 300k further steps, a better idea is to use 100× gradient accumulation to re-train that 3k steps with 100× batch size. Note that perhaps we should not do this *too* extremely (perhaps 100x accumulation is too extreme), but you should consider that, since "sudden converge" will *always* happen at that certain point, getting a better converge is more important.
 
-## ControlNet with Depth
+Because that "sudden converge" always happens, lets say "sudden converge" will happen at 3k step and our money can optimize 90k step, then we have two options: (1) train 3k steps, sudden converge, then train 87k steps. (2) 30x gradient accumulation, train 3k steps (90k real computation steps), then sudden converge.
 
-Stable Diffusion 1.5 + ControlNet (using depth map)
+In my experiments, (2) is usually better than (1). However, in real cases, perhaps you may need to balance the steps before and after the "sudden converge" on your own to find a balance. The training after "sudden converge" is also important.
 
-    python gradio_depth2image.py
+But usually, if your logic batch size is already bigger than 256, then further extending the batch size is not very meaningful. In that case, perhaps a better idea is to train more steps. I tried some "common" logic batch size at 64 or 96 or 128 (by gradient accumulation), it seems that many complicated conditions can be solved very well already.
 
-Great! Now SD 1.5 also have a depth control. FINALLY. So many possibilities (considering SD1.5 has much more community models than SD2).
-
-Note that different from Stability's model, the ControlNet receive the full 512×512 depth map, rather than 64×64 depth. Note that Stability's SD2 depth model use 64*64 depth maps. This means that the ControlNet will preserve more details in the depth map.
-
-This is always a strength because if users do not want to preserve more details, they can simply use another SD to post-process an i2i. But if they want to preserve more details, ControlNet becomes their only choice. Again, SD2 uses 64×64 depth, we use 512×512.
-
-Prompt: "Stormtrooper's lecture"
-![p](github_page/p15.png)
-
-## ControlNet with Normal Map
-
-Stable Diffusion 1.5 + ControlNet (using normal map)
-
-    python gradio_normal2image.py
-
-This model use normal map. Rightnow in the APP, the normal is computed from the midas depth map and a user threshold (to determine how many area is background with identity normal face to viewer, tune the "Normal background threshold" in the gradio app to get a feeling).
-
-Prompt: "Cute toy"
-![p](github_page/p17.png)
-
-Prompt: "Plaster statue of Abraham Lincoln"
-![p](github_page/p18.png)
-
-Compared to depth model, this model seems to be a bit better at preserving the geometry. This is intuitive: minor details are not salient in depth maps, but are salient in normal maps. Below is the depth result with same inputs. You can see that the hairstyle of the man in the input image is modified by depth model, but preserved by the normal model. 
-
-Prompt: "Plaster statue of Abraham Lincoln"
-![p](github_page/p19.png)
-
-## ControlNet with Anime Line Drawing
-
-We also trained a relatively simple ControlNet for anime line drawings. This tool may be useful for artistic creations. (Although the image details in the results is a bit modified, since it still diffuse latent images.)
-
-This model is not available right now. We need to evaluate the potential risks before releasing this model. Nevertheless, you may be interested in [transferring the ControlNet to any community model](https://github.com/lllyasviel/ControlNet/discussions/12).
-
-![p](github_page/p21.png)
-
-<a id="guess-anchor"></a>
-
-# Guess Mode / Non-Prompt Mode
-
-The "guess mode" (or called non-prompt mode) will completely unleash all the power of the very powerful ControlNet encoder. 
-
-See also the blog - [Ablation Study: Why ControlNets use deep encoder? What if it was lighter? Or even an MLP?](https://github.com/lllyasviel/ControlNet/discussions/188)
-
-You need to manually check the "Guess Mode" toggle to enable this mode.
-
-In this mode, the ControlNet encoder will try best to recognize the content of the input control map, like depth map, edge map, scribbles, etc, even if you remove all prompts.
-
-**Let's have fun with some very challenging experimental settings!**
-
-**No prompts. No "positive" prompts. No "negative" prompts. No extra caption detector. One single diffusion loop.**
-
-For this mode, we recommend to use 50 steps and guidance scale between 3 and 5.
-
-![p](github_page/uc2a.png)
-
-No prompts:
-
-![p](github_page/uc2b.png)
-
-Note that the below example is 768×768. No prompts. No "positive" prompts. No "negative" prompts.
-
-![p](github_page/uc1.png)
-
-By tuning the parameters, you can get some very intereting results like below:
-
-![p](github_page/uc3.png)
-
-Because no prompt is available, the ControlNet encoder will "guess" what is in the control map. Sometimes the guess result is really interesting. Because diffusion algorithm can essentially give multiple results, the ControlNet seems able to give multiple guesses, like this:
-
-![p](github_page/uc4.png)
-
-Without prompt, the HED seems good at generating images look like paintings when the control strength is relatively low:
-
-![p](github_page/uc6.png)
-
-The Guess Mode is also supported in [WebUI Plugin](https://github.com/Mikubill/sd-webui-controlnet):
-
-![p](github_page/uci1.png)
-
-No prompts. Default WebUI parameters. Pure random results with the seed being 12345. Standard SD1.5. Input scribble is in "test_imgs" folder to reproduce.
-
-![p](github_page/uci2.png)
-
-Below is another challenging example:
-
-![p](github_page/uci3.png)
-
-No prompts. Default WebUI parameters. Pure random results with the seed being 12345. Standard SD1.5. Input scribble is in "test_imgs" folder to reproduce.
-
-![p](github_page/uci4.png)
-
-Note that in the guess mode, you will still be able to input prompts. The only difference is that the model will "try harder" to guess what is in the control map even if you do not provide the prompt. Just try it yourself!
-
-Besides, if you write some scripts (like BLIP) to generate image captions from the "guess mode" images, and then use the generated captions as prompts to diffuse again, you will get a SOTA pipeline for fully automatic conditional image generating.
-
-# Combining Multiple ControlNets
-
-ControlNets are composable: more than one ControlNet can be easily composed to multi-condition control.
-
-Right now this feature is in experimental stage in the [Mikubill' A1111 Webui Plugin](https://github.com/Mikubill/sd-webui-controlnet):
-
-![p](github_page/multi2.png)
-
-![p](github_page/multi.png)
-
-As long as the models are controlling the same SD, the "boundary" between different research projects does not even exist. This plugin also allows different methods to work together!
-
-# Use ControlNet in Any Community Model (SD1.X)
-
-This is an experimental feature.
-
-[See the steps here](https://github.com/lllyasviel/ControlNet/discussions/12).
-
-Or you may want to use the [Mikubill' A1111 Webui Plugin](https://github.com/Mikubill/sd-webui-controlnet) which is plug-and-play and does not need manual merging.
-
-# Annotate Your Own Data
-
-We provide simple python scripts to process images.
-
-[See a gradio example here](docs/annotator.md).
-
-# Train with Your Own Data
-
-Training a ControlNet is as easy as (or even easier than) training a simple pix2pix. 
-
-[See the steps here](docs/train.md).
-
-# Related Resources
-
-Special Thank to the great project - [Mikubill' A1111 Webui Plugin](https://github.com/Mikubill/sd-webui-controlnet) !
-
-We also thank Hysts for making [Hugging Face Space](https://huggingface.co/spaces/hysts/ControlNet) as well as more than 65 models in that amazing [Colab list](https://github.com/camenduru/controlnet-colab)! 
-
-Thank haofanwang for making [ControlNet-for-Diffusers](https://github.com/haofanwang/ControlNet-for-Diffusers)!
-
-We also thank all authors for making Controlnet DEMOs, including but not limited to [fffiloni](https://huggingface.co/spaces/fffiloni/ControlNet-Video), [other-model](https://huggingface.co/spaces/hysts/ControlNet-with-other-models), [ThereforeGames](https://github.com/AUTOMATIC1111/stable-diffusion-webui/discussions/7784), [RamAnanth1](https://huggingface.co/spaces/RamAnanth1/ControlNet), etc!
-
-Besides, you may also want to read these amazing related works:
-
-[Composer: Creative and Controllable Image Synthesis with Composable Conditions](https://github.com/damo-vilab/composer): A much bigger model to control diffusion!
-
-[T2I-Adapter: Learning Adapters to Dig out More Controllable Ability for Text-to-Image Diffusion Models](https://github.com/TencentARC/T2I-Adapter): A much smaller model to control stable diffusion!
-
-[ControlLoRA: A Light Neural Network To Control Stable Diffusion Spatial Information](https://github.com/HighCWu/ControlLoRA): Implement Controlnet using LORA!
-
-And these amazing recent projects: [InstructPix2Pix Learning to Follow Image Editing Instructions](https://www.timothybrooks.com/instruct-pix2pix), [Pix2pix-zero: Zero-shot Image-to-Image Translation](https://github.com/pix2pixzero/pix2pix-zero), [Plug-and-Play Diffusion Features for Text-Driven Image-to-Image Translation](https://github.com/MichalGeyer/plug-and-play), [MaskSketch: Unpaired Structure-guided Masked Image Generation](https://arxiv.org/abs/2302.05496), [SEGA: Instructing Diffusion using Semantic Dimensions](https://arxiv.org/abs/2301.12247), [Universal Guidance for Diffusion Models](https://github.com/arpitbansal297/Universal-Guided-Diffusion), [Region-Aware Diffusion for Zero-shot Text-driven Image Editing](https://github.com/haha-lisa/RDM-Region-Aware-Diffusion-Model), [Domain Expansion of Image Generators](https://arxiv.org/abs/2301.05225), [Image Mixer](https://twitter.com/LambdaAPI/status/1626327289288957956), [MultiDiffusion: Fusing Diffusion Paths for Controlled Image Generation](https://multidiffusion.github.io/)
-
-# Citation
-
-    @misc{zhang2023adding,
-      title={Adding Conditional Control to Text-to-Image Diffusion Models}, 
-      author={Lvmin Zhang and Maneesh Agrawala},
-      year={2023},
-      eprint={2302.05543},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV}
-    }
-
-[Arxiv Link](https://arxiv.org/abs/2302.05543)
+### Acknowledgements
+This code borrows heavily from [ControlNet](https://github.com/lllyasviel/ControlNet) repository. Many thanks.
