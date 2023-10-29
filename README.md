@@ -22,9 +22,9 @@ Upload the clay dataset as follows:
     ControlNet/training/clay/source/X.png
     ControlNet/training/clay/target/X.png
 
-In the folder "clay/source", you will store the color-coded layouts. For getting the color-coded layouts from bounding box layout, use the [generate_clay_gt.py](https://huggingface.co/datasets/iasobolev/guilget/tree/main). It is also important to have a square shaped input, for that you can use the [rescale.py](https://huggingface.co/datasets/iasobolev/guilget/tree/main) for reducing the size, then use [borders.py](https://huggingface.co/datasets/iasobolev/guilget/tree/main) to add grey default borders that will allow to have a squared image without deformation of the input.
+In the folder "clay/source", you will store the color-coded layouts. For getting the color-coded layouts from bounding box layout, use the [generate_clay_gt.py](https://github.com/dysoxor/guid/blob/master/training/clay/generate_clay_gt.py). It is also important to have a square shaped input, for that you can use the [rescale.py](https://github.com/dysoxor/guid/blob/master/training/clay/rescale.py) for reducing the size, then use [borders.py](https://github.com/dysoxor/guid/blob/master/training/clay/borders.py) to add grey default borders that will allow to have a squared image without deformation of the input.
 
-In the folder "clay/target", you will store the design associated to each layout. You might need to use [rescale.py](https://huggingface.co/datasets/iasobolev/guilget/tree/main) and [borders.py](https://huggingface.co/datasets/iasobolev/guilget/tree/main) here as well
+In the folder "clay/target", you will store the design associated to each layout. You might need to use [rescale.py](https://github.com/dysoxor/guid/blob/master/training/clay/rescale.py) and [borders.py](https://github.com/dysoxor/guid/blob/master/training/clay/borders.py) here as well
 
 In the "clay/prompt.json", you will have their filenames and prompts. Each prompt is a default one "High quality, detailed, and professional app interface". More precisely, here is the expected format for the first two training data:
 
@@ -250,7 +250,7 @@ python generate.py
 
 ## Step 6 - Evaluate
 
-For the evaluation of the generated designs we used the FID and diversity score which are the most common metrics in the field. You can find the codes to do it in [fid.py](https://huggingface.co/datasets/iasobolev/controlnet/tree/main/version_4) and [diversity.py](https://huggingface.co/datasets/iasobolev/controlnet/tree/main/version_4). Before evaluating, it would be better to crop the generated designs to remove gray borders, [crop.py](https://huggingface.co/datasets/iasobolev/controlnet/tree/main/version_4) allows to do that. 
+For the evaluation of the generated designs we used the FID and diversity score which are the most common metrics in the field. You can find the codes to do it in [fid.py](https://github.com/dysoxor/guid/blob/master/training/clay/fid2.py) and [diversity.py](https://github.com/dysoxor/guid/blob/master/training/clay/diversity.py). Before evaluating, it would be better to crop the generated designs to remove gray borders, [crop.py](https://github.com/dysoxor/guid/blob/master/training/clay/crop.py) allows to do that. 
 
 ### Acknowledgements
 This code borrows heavily from [ControlNet](https://github.com/lllyasviel/ControlNet) repository. Many thanks.
