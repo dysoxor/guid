@@ -10,6 +10,10 @@ conda env create -f environment.yaml
 conda activate control
 ```
 
+If you want to try a pre-trained model, here are [some weights](https://huggingface.co/datasets/iasobolev/controlnet/tree/main/version_4) you have to put in `lightning_log/version_x/` and go directly to the `Step 5 - generate!` below
+
+
+
 ## Step 1 - Get the dataset ready
 
 Upload the clay dataset as follows:
@@ -227,6 +231,26 @@ Because that "sudden converge" always happens, lets say "sudden converge" will h
 In my experiments, (2) is usually better than (1). However, in real cases, perhaps you may need to balance the steps before and after the "sudden converge" on your own to find a balance. The training after "sudden converge" is also important.
 
 But usually, if your logic batch size is already bigger than 256, then further extending the batch size is not very meaningful. In that case, perhaps a better idea is to train more steps. I tried some "common" logic batch size at 64 or 96 or 128 (by gradient accumulation), it seems that many complicated conditions can be solved very well already.
+
+## Step 5 - Generate!
+
+you have now your model, to try it change the path to your weights in `gradio_seg2image.py`, then run it
+
+```shell
+python gradio_seg2image.py
+```
+
+you will have then access to an interface running locally where you can try the model.
+
+If you want run experiments with many designs, the manual generation with `gradio_seg2image.py` might be very time consuming, for this purpose I made the `generate.py` that can automatically generate designs for each layout of a directory. There are many parameters that you can play with depending on the purpose of your experiment. *Don't forget to change the path to the weight* 
+
+```shell
+python generate.py
+```
+
+## Step 6 - Evaluate
+
+For the evaluation of the generated designs we used the FID and diversity score which are the most common metrics in the field. You can find the codes to do it in [fid.py](https://huggingface.co/datasets/iasobolev/controlnet/tree/main/version_4) and [diversity.py](https://huggingface.co/datasets/iasobolev/controlnet/tree/main/version_4). Before evaluating, it would be better to crop the generated designs to remove gray borders, [crop.py](https://huggingface.co/datasets/iasobolev/controlnet/tree/main/version_4) allows to do that. 
 
 ### Acknowledgements
 This code borrows heavily from [ControlNet](https://github.com/lllyasviel/ControlNet) repository. Many thanks.
