@@ -10,7 +10,7 @@ conda env create -f environment.yaml
 conda activate control
 ```
 
-If you want to try a pre-trained model, here are [some weights](https://huggingface.co/datasets/iasobolev/controlnet/tree/main/version_4) you have to put in `lightning_logs/version_x/` and go directly to the `Step 5 - generate!` below
+If you want to try a pre-trained model, here are [some weights](https://huggingface.co/datasets/iasobolev/controlnet/tree/main/version_4) you have to put in `lightning_logs/version_x/` and go directly to the `Step 5 - generate!` below. If you didn't train GUILGET, you can find [HERE](https://huggingface.co/datasets/iasobolev/guilget/tree/main) the source and target folders as well as some prompt to start with (there are a lot of other files you don't need them)
 
 
 
